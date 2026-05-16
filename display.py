@@ -90,7 +90,7 @@ def display_surface_and_curve(psi, psi_d, a1, a2, b1, b2,
         return
 
     import ipywidgets as widgets
-    from IPython.display import display as ipy_display
+    from IPython.display import display as ipy_display, clear_output
 
     if ell_range is None:
         ell_range = (ell / 5, ell * 5)
@@ -116,36 +116,33 @@ def display_surface_and_curve(psi, psi_d, a1, a2, b1, b2,
     u0_slider  = make_slider(u0,  u0_range,  "u₀")
     v0_slider  = make_slider(v0,  v0_range,  "v₀")
 
-    fig = go.FigureWidget(data=[
-        _surface_trace(psi, a1, a2, b1, b2, num_u, num_v),
-        _curve_trace(sol_u, sol_v, psi, num_t),
-    ])
-    fig.update_layout(
-        scene=dict(xaxis_title="x", yaxis_title="y", zaxis_title="z"),
-        margin=dict(l=0, r=0, t=0, b=0),
-    )
+    surface = _surface_trace(psi, a1, a2, b1, b2, num_u, num_v)
+    out = widgets.Output()
 
-    def update(change):
+    def redraw(ell_val, E_val, u0_val, v0_val):
         try:
-            s_u = solve_u(psi_d, u0_slider.value, ell_slider.value,
-                          E_slider.value, t_span, **kwargs)
-            s_v = solve_v(s_u, ell_slider.value, v0_slider.value, **kwargs)
-            t0 = max(s_u.t[0], s_v.t[0])
-            tf = min(s_u.t[-1], s_v.t[-1])
-            t = np.linspace(t0, tf, num_t)
-            u = s_u.sol(t)[0]
-            v = s_v.sol(t)[0]
-            with fig.batch_update():
-                fig.data[1].x = u * np.cos(v)
-                fig.data[1].y = u * np.sin(v)
-                fig.data[1].z = np.vectorize(psi)(u)
+            s_u = solve_u(psi_d, u0_val, ell_val, E_val, t_span, **kwargs)
+            s_v = solve_v(s_u, ell_val, v0_val, **kwargs)
+            fig = go.Figure(data=[surface, _curve_trace(s_u, s_v, psi, num_t)])
+            fig.update_layout(
+                scene=dict(xaxis_title="x", yaxis_title="y", zaxis_title="z"),
+                margin=dict(l=0, r=0, t=0, b=0),
+            )
+            with out:
+                clear_output(wait=True)
+                fig.show()
         except Exception:
             pass
+
+    redraw(ell, E, u0, v0)
+
+    def update(change):
+        redraw(ell_slider.value, E_slider.value, u0_slider.value, v0_slider.value)
 
     for slider in (ell_slider, E_slider, u0_slider, v0_slider):
         slider.observe(update, names="value")
 
-    ipy_display(widgets.VBox([fig, ell_slider, E_slider, u0_slider, v0_slider]))
+    ipy_display(widgets.VBox([out, ell_slider, E_slider, u0_slider, v0_slider]))
 
 
 def display_curve(sol_u, sol_v, psi, num_t=500):
