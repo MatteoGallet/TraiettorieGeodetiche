@@ -1,0 +1,10 @@
+name: geodetic-trajectories
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - scipy
+  - plotly
+  - ipywidgets
+  - jupyterlab
