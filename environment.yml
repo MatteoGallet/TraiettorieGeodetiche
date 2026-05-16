@@ -7,4 +7,4 @@ dependencies:
   - scipy
   - plotly
   - ipywidgets
-  - notebook
+  - notebook<7
