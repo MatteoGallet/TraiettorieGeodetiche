@@ -6,6 +6,5 @@ dependencies:
   - numpy
   - scipy
   - plotly
-  - ipywidgets>=8
-  - jupyterlab>=4
-  - jupyterlab_widgets>=3
+  - ipywidgets
+  - notebook
