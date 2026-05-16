@@ -99,17 +99,18 @@ def display_surface_and_curve(psi, psi_d, a1, a2, b1, b2,
     if v0_range is None:
         v0_range = (v0 - np.pi, v0 + np.pi)
 
-    import ipywidgets as widgets
-    from IPython.display import display as ipy_display, clear_output
+    import panel as pn
+    from IPython.display import display as ipy_display
+
+    pn.extension('plotly')
 
     def make_slider(value, rng, label):
-        return widgets.FloatSlider(
+        return pn.widgets.FloatSlider(
+            name=label,
             value=value,
-            min=rng[0], max=rng[1],
+            start=rng[0],
+            end=rng[1],
             step=(rng[1] - rng[0]) / 100,
-            description=label,
-            continuous_update=False,
-            style={"description_width": "initial"},
         )
 
     ell_slider = make_slider(ell, ell_range, "ℓ")
@@ -118,9 +119,8 @@ def display_surface_and_curve(psi, psi_d, a1, a2, b1, b2,
     v0_slider  = make_slider(v0,  v0_range,  "v₀")
 
     surface = _surface_trace(psi, a1, a2, b1, b2, num_u, num_v)
-    out = widgets.Output()
 
-    def redraw(ell_val, E_val, u0_val, v0_val):
+    def make_plot(ell_val, E_val, u0_val, v0_val):
         try:
             s_u = solve_u(psi_d, u0_val, ell_val, E_val, t_span, **kwargs)
             s_v = solve_v(s_u, ell_val, v0_val, **kwargs)
@@ -129,21 +129,12 @@ def display_surface_and_curve(psi, psi_d, a1, a2, b1, b2,
                 scene=dict(xaxis_title="x", yaxis_title="y", zaxis_title="z"),
                 margin=dict(l=0, r=0, t=0, b=0),
             )
-            with out:
-                clear_output(wait=True)
-                fig.show()
+            return pn.pane.Plotly(fig, sizing_mode="stretch_width")
         except Exception:
-            pass
+            return pn.pane.Str("Could not compute curve for these parameters.")
 
-    redraw(ell, E, u0, v0)
-
-    def update(change):
-        redraw(ell_slider.value, E_slider.value, u0_slider.value, v0_slider.value)
-
-    for slider in (ell_slider, E_slider, u0_slider, v0_slider):
-        slider.observe(update, names="value")
-
-    ipy_display(widgets.VBox([out, ell_slider, E_slider, u0_slider, v0_slider]))
+    bound = pn.bind(make_plot, ell_slider, E_slider, u0_slider, v0_slider)
+    ipy_display(pn.Column(bound, ell_slider, E_slider, u0_slider, v0_slider))
 
 
 def display_curve(sol_u, sol_v, psi, num_t=500):

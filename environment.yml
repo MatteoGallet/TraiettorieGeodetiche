@@ -6,5 +6,5 @@ dependencies:
   - numpy
   - scipy
   - plotly
-  - ipywidgets
-  - notebook<7
+  - panel
+  - jupyterlab
