@@ -53,10 +53,11 @@ def _show(traces):
 
 def display_surface_and_curve(psi, psi_d, a1, a2, b1, b2,
                                ell, E, u0, v0, t_span,
-                               num_u=60, num_v=60, num_t=500,
+                               num_u=60, num_v=60, num_t=200,
                                interactive=False,
                                ell_range=None, E_range=None,
                                u0_range=None, v0_range=None,
+                               n_steps=10,
                                **kwargs):
     """Display the surface and the geodesic curve together in a single interactive plot.
 
@@ -73,11 +74,12 @@ def display_surface_and_curve(psi, psi_d, a1, a2, b1, b2,
     u0          : float, initial value u(0).
     v0          : float, initial value v(0).
     t_span      : (t0, tf), integration interval.
-    interactive : bool, if True show sliders for ell, E, u0, v0 (requires ipywidgets).
+    interactive : bool, if True add plotly sliders for ell, E, u0, v0.
     ell_range   : (min, max) for the ell slider; defaults to [ell/5, ell*5].
     E_range     : (min, max) for the E slider; defaults to [E/5, E*5].
     u0_range    : (min, max) for the u0 slider; defaults to [u0/5, u0*5].
     v0_range    : (min, max) for the v0 slider; defaults to [v0-pi, v0+pi].
+    n_steps     : number of discrete steps per slider (default 10).
     """
     sol_u = solve_u(psi_d, u0, ell, E, t_span, **kwargs)
     sol_v = solve_v(sol_u, ell, v0, **kwargs)
@@ -89,9 +91,6 @@ def display_surface_and_curve(psi, psi_d, a1, a2, b1, b2,
         ])
         return
 
-    import ipywidgets as widgets
-    from IPython.display import display as ipy_display, clear_output
-
     if ell_range is None:
         ell_range = (ell / 5, ell * 5)
     if E_range is None:
@@ -101,48 +100,74 @@ def display_surface_and_curve(psi, psi_d, a1, a2, b1, b2,
     if v0_range is None:
         v0_range = (v0 - np.pi, v0 + np.pi)
 
-    def make_slider(value, rng, label):
-        return widgets.FloatSlider(
-            value=value,
-            min=rng[0], max=rng[1],
-            step=(rng[1] - rng[0]) / 100,
-            description=label,
-            continuous_update=False,
-            style={"description_width": "initial"},
-        )
+    N = n_steps
+    param_labels  = ["ℓ", "E", "u₀", "v₀"]
+    param_grids   = [
+        np.linspace(ell_range[0], ell_range[1], N),
+        np.linspace(E_range[0],   E_range[1],   N),
+        np.linspace(u0_range[0],  u0_range[1],  N),
+        np.linspace(v0_range[0],  v0_range[1],  N),
+    ]
+    init_vals = [ell, E, u0, v0]
+    active = [int(np.argmin(np.abs(g - v))) for g, v in zip(param_grids, init_vals)]
 
-    ell_slider = make_slider(ell, ell_range, "ℓ")
-    E_slider   = make_slider(E,   E_range,   "E")
-    u0_slider  = make_slider(u0,  u0_range,  "u₀")
-    v0_slider  = make_slider(v0,  v0_range,  "v₀")
-
-    surface = _surface_trace(psi, a1, a2, b1, b2, num_u, num_v)
-    out = widgets.Output()
-
-    def redraw(ell_val, E_val, u0_val, v0_val):
+    def safe_curve(ell_v, E_v, u0_v, v0_v):
         try:
-            s_u = solve_u(psi_d, u0_val, ell_val, E_val, t_span, **kwargs)
-            s_v = solve_v(s_u, ell_val, v0_val, **kwargs)
-            fig = go.Figure(data=[surface, _curve_trace(s_u, s_v, psi, num_t)])
-            fig.update_layout(
-                scene=dict(xaxis_title="x", yaxis_title="y", zaxis_title="z"),
-                margin=dict(l=0, r=0, t=0, b=0),
-            )
-            with out:
-                clear_output(wait=True)
-                fig.show()
+            s_u = solve_u(psi_d, u0_v, ell_v, E_v, t_span, **kwargs)
+            s_v = solve_v(s_u, ell_v, v0_v, **kwargs)
+            return _curve_trace(s_u, s_v, psi, num_t)
         except Exception:
-            pass
+            return go.Scatter3d(x=[], y=[], z=[], mode="lines",
+                                line=dict(width=4, color="red"), showlegend=False)
 
-    redraw(ell, E, u0, v0)
+    # One group of N curves per parameter (others held at initial value).
+    # Layout: [surface] [N ell-curves] [N E-curves] [N u0-curves] [N v0-curves]
+    surface = _surface_trace(psi, a1, a2, b1, b2, num_u, num_v)
+    groups = [
+        [safe_curve(v, E,   u0,  v0)  for v in param_grids[0]],
+        [safe_curve(ell, v, u0,  v0)  for v in param_grids[1]],
+        [safe_curve(ell, E, v,   v0)  for v in param_grids[2]],
+        [safe_curve(ell, E, u0,  v)   for v in param_grids[3]],
+    ]
 
-    def update(change):
-        redraw(ell_slider.value, E_slider.value, u0_slider.value, v0_slider.value)
+    all_traces = [surface]
+    for g in groups:
+        for tr in g:
+            tr.visible = False
+            all_traces.append(tr)
 
-    for slider in (ell_slider, E_slider, u0_slider, v0_slider):
-        slider.observe(update, names="value")
+    # Initially show the curve for the active ell step.
+    all_traces[1 + active[0]].visible = True
 
-    ipy_display(widgets.VBox([out, ell_slider, E_slider, u0_slider, v0_slider]))
+    def visibility(group_idx, step_idx):
+        vis = [True]                        # surface always on
+        for g in range(4):
+            for s in range(N):
+                vis.append(g == group_idx and s == step_idx)
+        return vis
+
+    sliders = []
+    for g, (label, grid, act) in enumerate(zip(param_labels, param_grids, active)):
+        steps = [
+            {"method": "update",
+             "label": f"{v:.3g}",
+             "args": [{"visible": visibility(g, i)}]}
+            for i, v in enumerate(grid)
+        ]
+        sliders.append({
+            "active": act,
+            "currentvalue": {"prefix": f"{label} = ", "xanchor": "center"},
+            "pad": {"b": 10},
+            "steps": steps,
+        })
+
+    fig = go.Figure(data=all_traces)
+    fig.update_layout(
+        scene=dict(xaxis_title="x", yaxis_title="y", zaxis_title="z"),
+        margin=dict(l=0, r=0, t=0, b=200),
+        sliders=sliders,
+    )
+    fig.show()
 
 
 def display_curve(sol_u, sol_v, psi, num_t=500):
