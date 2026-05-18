@@ -3,10 +3,10 @@ from scipy.integrate import solve_ivp
 
 
 def solve_u(psi_d, u0, ell, E, t_span, t_eval=None, sign_du0=1, **kwargs):
-    """Solve (du/dt)^2 = (2E - ell^2/u^2) / (1 + psi_d(u))^2, u(0) = u0.
+    """Solve (du/dt)^2 = (2E - ell^2/u^2) / (1 + psi_d(u)^2), u(0) = u0.
 
     Differentiating both sides gives the equivalent second-order ODE
-        u'' = F'(u) / 2,  F(u) = (2E - ell^2/u^2) / (1 + psi_d(u))^2,
+        (d^2 u/dt^2) = F'(u) / 2,  F(u) = (2E - ell^2/u^2) / (1 + psi_d(u)^2),
     which is integrated with scipy.
 
     Parameters
@@ -29,7 +29,7 @@ def solve_u(psi_d, u0, ell, E, t_span, t_eval=None, sign_du0=1, **kwargs):
         sol.sol(t) — dense interpolant (requires dense_output=True, set by default)
     """
     def F(u):
-        return (2 * E - ell**2 / u**2) / (1 + psi_d(u))**2
+        return (2 * E - ell**2 / u**2) / (1 + psi_d(u)**2)
 
     def dF(u):
         h = 1e-7 * abs(u) + 1e-12
